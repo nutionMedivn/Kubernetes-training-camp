@@ -165,7 +165,7 @@ SHELL ["cmd", "/S", "/C"]
 
 ## 最佳实践
 
-### 理解构建上下文
+### 1. 理解构建上下文
 
 ***'.' 很重要***
 
@@ -176,10 +176,10 @@ docker build [OPTIONS] -f- PATH << EOF
 EOF
 ```
 
-### .dockerignore
+### 2. .dockerignore
 
+### 3. 多阶段构建
 
-### 多阶段构建
 多阶段构建可以在无需减少中间层的情况下，大幅降低image的最终大小。
 
 控制images大小是镜像构建的一个重要挑战，每条指令在image中增加layer，你需要在构建下一个layer前，清理所有不相关的层级结构。这还涉及到很多shell相关的技巧，来实现控制目标。
@@ -242,3 +242,33 @@ WORKDIR /root/
 COPY --from=0 /go/src/github.com/alexellis/href-counter/app .
 CMD ["./app"]  
 ```
+
+### 4. 不要安装非必要的package
+
+### 5. 隔离应用
+
+### 6. 最小化layers
+
+### 7. 排序多行变量
+
+***Example***
+
+```dockerfile
+RUN apt-get update && apt-get install -y \
+  bzr \
+  cvs \
+  git \
+  mercurial \
+  subversion \
+  && rm -rf /var/lib/apt/lists/*
+```
+
+### 8. 利用构建缓存
+
+构建过程中docker会先查找构建缓存， 通过`--no-cache=true`可以在构建过程中禁止使用缓存
+
+原则：
+
+- 构建过程中搜索缓存是否存在相同layer，存在直接调用缓存，不存在构建新layer
+- 任意文件变更缓存都将失效，不考虑部分元数据
+- 除文件相关命令外，只检查指令字符串匹配
