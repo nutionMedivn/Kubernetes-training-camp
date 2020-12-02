@@ -781,4 +781,5 @@ EOF
   "goVersion": "go1.15",
   "compiler": "gc",
   "platform": "linux/amd64"
+}
 ```
