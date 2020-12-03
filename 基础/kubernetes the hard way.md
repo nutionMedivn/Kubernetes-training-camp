@@ -12,13 +12,31 @@
 
 ## 安装工具
 
+### 系统配置
+
+关闭防火墙，关闭selinux
+
+```bash
+systemctl disable firewalld.service
+setenforce 0
+swapoff -a
+```
+
+下载二进制包
+
+```bash
+wget https://dl.k8s.io/v1.18.6/kubernetes-server-linux-amd64.tar.gz
+wget https://dl.k8s.io/v1.18.6/kubernetes-client-linux-amd64.tar.gz
+yum install -y lrzs
+```
+
 ### CFSSL
 
 `packages/`目录下有cfssl和cfssljson的二进制程序，请在其中之一节点安装CFSSL。
 
 ### kubectl
 
-请在三个master节点上分别安装`kubectl`
+请在master节点上分别安装`kubectl`
 
 ```bash
 cp kubernetes/server/bin/kubectl /usr/local/bin/
@@ -27,28 +45,7 @@ cp kubernetes/server/bin/kubectl /usr/local/bin/
 配置免密访问
 
 ```bash
-[root@node01 ~]# ssh-keygen -t rsa -b 4096
-Generating public/private rsa key pair.
-Enter file in which to save the key (/root/.ssh/id_rsa): 
-Created directory '/root/.ssh'.
-Enter passphrase (empty for no passphrase): 
-Enter same passphrase again: 
-Your identification has been saved in /root/.ssh/id_rsa.
-Your public key has been saved in /root/.ssh/id_rsa.pub.
-The key fingerprint is:
-SHA256:Qg5d9R4V465jpDdvca0IhI3IsmyHW9e3mip9z0YWHGE root@controller01
-The key's randomart image is:
-+---[RSA 4096]----+
-|        ... E.+. |
-|     . .   o.o . |
-|    ..o. + .o..  |
-|    .+o o o.oo   |
-|   . +o So  o.. .|
-|    = o.. oo+.. o|
-|   . + o  .=*o + |
-|    . . . .=++o  |
-|       ..oo+o..  |
-+----[SHA256]-----+
+ssh-keygen -t rsa -b 4096
 ```
 
 设置内核参数`net.ipv4.ip_forward=1`
@@ -85,7 +82,7 @@ EOF
 
 cat > ca-csr.json <<EOF
 {
-  "CN": "Kubernetes",
+  "CN": "training-cluster",
   "key": {
     "algo": "rsa",
     "size": 2048
@@ -94,11 +91,14 @@ cat > ca-csr.json <<EOF
     {
       "C": "CN",
       "L": "DL",
-      "O": "Kubernetes",
+      "O": "neuedu",
       "OU": "CA",
       "ST": "LN"
     }
-  ]
+  ],
+  "ca": {
+    "expiry": "200000h"
+  }
 }
 EOF
 
@@ -122,7 +122,7 @@ cat > admin-csr.json <<EOF
       "C": "CN",
       "L": "DL",
       "O": "system:masters",
-      "OU": "Kubernetes The Hard Way",
+      "OU": "neuedu",
       "ST": "LN"
     }
   ]
@@ -135,9 +135,9 @@ cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kube
 ### kubelet client证书
 
 ```bash
-cat > worker01-csr.json <<EOF
+cat > worker-csr.json <<EOF
 {
-  "CN": "system:node:worker01",
+  "CN": "system:node",
   "key": {
     "algo": "rsa",
     "size": 2048
@@ -147,7 +147,7 @@ cat > worker01-csr.json <<EOF
       "C": "CN",
       "L": "DL",
       "O": "system:nodes",
-      "OU": "Kubernetes The Hard Way",
+      "OU": "neuedu",
       "ST": "LN"
     }
   ]
@@ -158,9 +158,9 @@ cfssl gencert \
   -ca=ca.pem \
   -ca-key=ca-key.pem \
   -config=ca-config.json \
-  -hostname=worker01,192.168.92.134 \
+  -hostname=kube-worker,192.168.92.161,kube-master,192.168.92.160 \
   -profile=kubernetes \
-  worker01-csr.json | cfssljson -bare worker01
+  worker-csr.json | cfssljson -bare kube-worker
 ```
 
 ### controller manager 证书
@@ -178,7 +178,7 @@ cat > kube-controller-manager-csr.json <<EOF
       "C": "CN",
       "L": "DL",
       "O": "system:kube-controller-manager",
-      "OU": "Kubernetes The Hard Way",
+      "OU": "neuedu",
       "ST": "LN"
     }
   ]
@@ -207,8 +207,8 @@ cat > kube-proxy-csr.json <<EOF
     {
       "C": "CN",
       "L": "DL",
-      "O": "system:node-proxier",
-      "OU": "Kubernetes The Hard Way",
+      "O": "system:kube-proxy",
+      "OU": "neuedu",
       "ST": "LN"
     }
   ]
@@ -238,7 +238,7 @@ cat > kube-scheduler-csr.json <<EOF
       "C": "CN",
       "L": "DL",
       "O": "system:kube-scheduler",
-      "OU": "Kubernetes The Hard Way",
+      "OU": "neuedu",
       "ST": "LN"
     }
   ]
@@ -256,8 +256,7 @@ cfssl gencert \
 ### kube-apiserver服务端证书
 
 ```bash
-KUBERNETES_PUBLIC_ADDRESS=192.168.92.131,192.168.92.135,192.168.92.133
-
+KUBERNETES_PUBLIC_ADDRESS=192.168.92.161
 KUBERNETES_HOSTNAMES=kubernetes,kubernetes.default,kubernetes.default.svc,kubernetes.default.svc.cluster,kubernetes.svc.cluster.local
 
 cat > kubernetes-csr.json <<EOF
@@ -272,7 +271,7 @@ cat > kubernetes-csr.json <<EOF
       "C": "CN",
       "L": "DL",
       "O": "Kubernetes",
-      "OU": "Kubernetes The Hard Way",
+      "OU": "neuedu",
       "ST": "LN"
     }
   ]
@@ -283,7 +282,7 @@ cfssl gencert \
   -ca=ca.pem \
   -ca-key=ca-key.pem \
   -config=ca-config.json \
-  -hostname=controller01,controller02,controller03,${KUBERNETES_PUBLIC_ADDRESS},127.0.0.1,${KUBERNETES_HOSTNAMES} \
+  -hostname=kube-master,${KUBERNETES_PUBLIC_ADDRESS},127.0.0.1,${KUBERNETES_HOSTNAMES} \
   -profile=kubernetes \
   kubernetes-csr.json | cfssljson -bare kubernetes
 ```
@@ -303,7 +302,7 @@ cat > service-account-csr.json <<EOF
       "C": "CN",
       "L": "DL",
       "O": "Kubernetes",
-      "OU": "Kubernetes The Hard Way",
+      "OU": "neuedu",
       "ST": "LN"
     }
   ]
@@ -321,9 +320,9 @@ cfssl gencert \
 ### 分发证书
 
 ```bash
-scp ca.pem worker01-key.pem worker01.pem worker01:~/
+scp ca/ca.pem kube-worker.pem kube-worker-key.pem kube-worker:~/
 
-for i in controller01 controller02 controller03; do scp ca.pem ca-key.pem kubernetes-key.pem kubernetes.pem service-account-key.pem service-account.pem $i:~/; done
+cp ca.pem ca-key.pem kubernetes-key.pem kubernetes.pem service-account-key.pem service-account.pem ~/
 ```
 
 ## 生成Kubernetes认证配置文件
@@ -333,49 +332,51 @@ for i in controller01 controller02 controller03; do scp ca.pem ca-key.pem kubern
 生成`controller manager`，`kubelet`，`kube-proxy`，`scheduler`和`admin`用户
 
 ```bash
-KUBERNETES_PUBLIC_ADDRESS=192.168.92.131,192.168.92.135,192.168.92.133
+KUBERNETES_PUBLIC_ADDRESS=192.168.92.160
 ```
 
 #### 生成kubelet客户配置文件
 
+***这里有权限问题，使用admin.kubeconfig替代，但是可以自定clusterrole***
+
 ```bash
-  kubectl config set-cluster kubernetes-the-hard-way \
+  kubectl config set-cluster training-cluster \
     --certificate-authority=ca.pem \
     --embed-certs=true \
     --server=https://${KUBERNETES_PUBLIC_ADDRESS}:6443 \
-    --kubeconfig=worker01.kubeconfig
+    --kubeconfig=kubelet.kubeconfig
 
-  kubectl config set-credentials system:node:worker01 \
-    --client-certificate=worker01.pem \
-    --client-key=worker01-key.pem \
+  kubectl config set-credentials system:node-problem-detector  \
+    --client-certificate=../kube-worker.pem \
+    --client-key=../kube-worker-key.pem \
     --embed-certs=true \
-    --kubeconfig=worker01.kubeconfig
+    --kubeconfig=kubelet.kubeconfig 
 
   kubectl config set-context default \
-    --cluster=kubernetes-the-hard-way \
-    --user=system:node:worker01 \
-    --kubeconfig=worker01.kubeconfig
+    --cluster=training-cluster \
+    --user=system:node \
+    --kubeconfig=kubelet.kubeconfig
 
-  kubectl config use-context default --kubeconfig=worker01.kubeconfig
+  kubectl config use-context default --kubeconfig=kubelet.kubeconfig
 ```
 
 #### 生成kuber-proxy配置文件
 
 ```bash
- kubectl config set-cluster kubernetes-the-hard-way \
-    --certificate-authority=ca.pem \
+ kubectl config set-cluster training-cluster \
+    --certificate-authority=../ca.pem \
     --embed-certs=true \
     --server=https://${KUBERNETES_PUBLIC_ADDRESS}:6443 \
     --kubeconfig=kube-proxy.kubeconfig
 
   kubectl config set-credentials system:kube-proxy \
-    --client-certificate=kube-proxy.pem \
-    --client-key=kube-proxy-key.pem \
+    --client-certificate=../kube-proxy.pem \
+    --client-key=../kube-proxy-key.pem \
     --embed-certs=true \
     --kubeconfig=kube-proxy.kubeconfig
 
   kubectl config set-context default \
-    --cluster=kubernetes-the-hard-way \
+    --cluster=training-cluster \
     --user=system:kube-proxy \
     --kubeconfig=kube-proxy.kubeconfig
 
@@ -385,20 +386,20 @@ KUBERNETES_PUBLIC_ADDRESS=192.168.92.131,192.168.92.135,192.168.92.133
 #### 生成controller-manager配置文件
 
 ```bash
-  kubectl config set-cluster kubernetes-the-hard-way \
-    --certificate-authority=ca.pem \
+  kubectl config set-cluster training-cluster \
+    --certificate-authority=../ca.pem \
     --embed-certs=true \
     --server=https://127.0.0.1:6443 \
     --kubeconfig=kube-controller-manager.kubeconfig
 
   kubectl config set-credentials system:kube-controller-manager \
-    --client-certificate=kube-controller-manager.pem \
-    --client-key=kube-controller-manager-key.pem \
+    --client-certificate=../kube-controller-manager.pem \
+    --client-key=../kube-controller-manager-key.pem \
     --embed-certs=true \
     --kubeconfig=kube-controller-manager.kubeconfig
 
   kubectl config set-context default \
-    --cluster=kubernetes-the-hard-way \
+    --cluster=training-cluster \
     --user=system:kube-controller-manager \
     --kubeconfig=kube-controller-manager.kubeconfig
 
@@ -408,20 +409,20 @@ KUBERNETES_PUBLIC_ADDRESS=192.168.92.131,192.168.92.135,192.168.92.133
 #### 生成kube-scheduler配置文件
 
 ```bash
-  kubectl config set-cluster kubernetes-the-hard-way \
-    --certificate-authority=ca.pem \
+  kubectl config set-cluster training-cluster \
+    --certificate-authority=../ca.pem \
     --embed-certs=true \
     --server=https://127.0.0.1:6443 \
     --kubeconfig=kube-scheduler.kubeconfig
 
   kubectl config set-credentials system:kube-scheduler \
-    --client-certificate=kube-scheduler.pem \
-    --client-key=kube-scheduler-key.pem \
+    --client-certificate=../kube-scheduler.pem \
+    --client-key=../kube-scheduler-key.pem \
     --embed-certs=true \
     --kubeconfig=kube-scheduler.kubeconfig
 
   kubectl config set-context default \
-    --cluster=kubernetes-the-hard-way \
+    --cluster=training-cluster \
     --user=system:kube-scheduler \
     --kubeconfig=kube-scheduler.kubeconfig
 
@@ -431,20 +432,20 @@ KUBERNETES_PUBLIC_ADDRESS=192.168.92.131,192.168.92.135,192.168.92.133
 #### 生成admin配置文件
 
 ```bash
-  kubectl config set-cluster kubernetes-the-hard-way \
-    --certificate-authority=ca.pem \
+  kubectl config set-cluster training-cluster \
+    --certificate-authority=../ca.pem \
     --embed-certs=true \
-    --server=https://127.0.0.1:6443 \
+    --server=https://192.168.92.160:6443 \
     --kubeconfig=admin.kubeconfig
 
   kubectl config set-credentials admin \
-    --client-certificate=admin.pem \
-    --client-key=admin-key.pem \
+    --client-certificate=../admin.pem \
+    --client-key=../admin-key.pem \
     --embed-certs=true \
     --kubeconfig=admin.kubeconfig
 
   kubectl config set-context default \
-    --cluster=kubernetes-the-hard-way \
+    --cluster=training-cluster \
     --user=admin \
     --kubeconfig=admin.kubeconfig
 
@@ -454,9 +455,9 @@ KUBERNETES_PUBLIC_ADDRESS=192.168.92.131,192.168.92.135,192.168.92.133
 ### 分发配置文件
 
 ```bash
-scp worker01.kubeconfig kube-proxy.kubeconfig worker01:~/
+scp kubelet.kubeconfig kube-proxy.kubeconfig kube-worker:~/
 
-for i in controller01 controller02 controller03; do scp admin.kubeconfig kube-controller-manager.kubeconfig kube-scheduler.kubeconfig $i:~/; done
+cp admin.kubeconfig kubelet.kubeconfig kube-controller-manager.kubeconfig kube-scheduler.kubeconfig ~/
 ```
 
 ## 生成数据加密配置和key
@@ -488,16 +489,11 @@ EOF
 ### 分发秘钥配置文件
 
 ```bash
-for i in controller01 controller02 controller03; do scp encryption-config.yaml $i:~/; done
+cp encryption-config.yaml ~/
 ```
 
 ## 启动一个etcd集群
 
-controller01安装ansible
-
-```bash
-yum install -y ansible
-```
 
 ### 启动一个etcd集群成员
 
@@ -511,8 +507,8 @@ mkdir -pv /etc/etcd /var/lib/etcd
 chmod 700 /var/lib/etcd
 cp ca.pem kubernetes-key.pem kubernetes.pem /etc/etcd/
 
-INTERNAL_IP=192.168.92.131
-ETCD_NAME=controller01
+INTERNAL_IP=192.168.92.160
+ETCD_NAME=kube-master
 
 ```
 
@@ -541,7 +537,7 @@ ExecStart=/usr/local/bin/etcd \\
   --listen-client-urls https://${INTERNAL_IP}:2379,https://127.0.0.1:2379 \\
   --advertise-client-urls https://${INTERNAL_IP}:2379 \\
   --initial-cluster-token etcd-cluster-0 \\
-  --initial-cluster controller01=https://192.168.92.131:2380,controller02=https://192.168.92.135:2380,controller03=https://192.168.92.133:2380 \\
+  --initial-cluster kube-master=https://192.168.92.160:2380 \\
   --initial-cluster-state new \\
   --data-dir=/var/lib/etcd
 Restart=on-failure
@@ -592,11 +588,11 @@ mv kube-apiserver kube-controller-manager kube-scheduler kubectl /usr/local/bin/
 ### 配置kubernetes API Server
 
 ```bash
- ansible controller -m shell -a "mkdir -pv /var/lib/kubernetes"
+mkdir -pv /var/lib/kubernetes
 
 mv ca.pem ca-key.pem kubernetes-key.pem kubernetes.pem service-account-key.pem service-account.pem encryption-config.yaml /var/lib/kubernetes
 
-INTERNAL_IP=192.168.92.131/192.168.92.135/192.168.92.133
+INTERNAL_IP=192.168.92.160
 
 cat <<EOF | sudo tee /etc/systemd/system/kube-apiserver.service
 [Unit]
@@ -607,26 +603,25 @@ Documentation=https://github.com/kubernetes/kubernetes
 ExecStart=/usr/local/bin/kube-apiserver \\
   --advertise-address=${INTERNAL_IP} \\
   --allow-privileged=true \\
-  --apiserver-count=3 \\
+  --apiserver-count=1 \\
   --audit-log-maxage=30 \\
   --audit-log-maxbackup=3 \\
   --audit-log-maxsize=100 \\
   --audit-log-path=/var/log/audit.log \\
-  --authorization-mode=Node,RBAC \\
+  --authorization-mode=RBAC \\
   --bind-address=0.0.0.0 \\
   --client-ca-file=/var/lib/kubernetes/ca.pem \\
   --enable-admission-plugins=NamespaceLifecycle,NodeRestriction,LimitRanger,ServiceAccount,DefaultStorageClass,ResourceQuota \\
   --etcd-cafile=/var/lib/kubernetes/ca.pem \\
   --etcd-certfile=/var/lib/kubernetes/kubernetes.pem \\
   --etcd-keyfile=/var/lib/kubernetes/kubernetes-key.pem \\
-  --etcd-servers=https://192.168.92.131:2379,https://192.168.92.135:2379,https://192.168.92.133:2379 \\
+  --etcd-servers=https://192.168.92.160:2379 \\
   --event-ttl=1h \\
   --encryption-provider-config=/var/lib/kubernetes/encryption-config.yaml \\
   --kubelet-certificate-authority=/var/lib/kubernetes/ca.pem \\
   --kubelet-client-certificate=/var/lib/kubernetes/kubernetes.pem \\
   --kubelet-client-key=/var/lib/kubernetes/kubernetes-key.pem \\
   --kubelet-https=true \\
-  --runtime-config=api/all=true \\
   --service-account-key-file=/var/lib/kubernetes/service-account.pem \\
   --service-cluster-ip-range=10.32.0.0/24 \\
   --service-node-port-range=30000-32767 \\
@@ -644,7 +639,7 @@ EOF
 ### 配置kubernetes controller-manager
 
 ```bash
-ansible controller -m shell -a "mv kube-controller-manager.kubeconfig /var/lib/kubernetes/"
+mv kube-controller-manager.kubeconfig /var/lib/kubernetes/
 
 cat <<EOF | sudo tee /etc/systemd/system/kube-controller-manager.service
 [Unit]
@@ -659,7 +654,7 @@ ExecStart=/usr/local/bin/kube-controller-manager \\
   --cluster-signing-cert-file=/var/lib/kubernetes/ca.pem \\
   --cluster-signing-key-file=/var/lib/kubernetes/ca-key.pem \\
   --kubeconfig=/var/lib/kubernetes/kube-controller-manager.kubeconfig \\
-  --leader-elect=true \\
+  --leader-elect=false \\
   --root-ca-file=/var/lib/kubernetes/ca.pem \\
   --service-account-private-key-file=/var/lib/kubernetes/service-account-key.pem \\
   --service-cluster-ip-range=10.32.0.0/24 \\
@@ -676,16 +671,7 @@ EOF
 ### 配置kubernetes scheduler
 
 ```bash
-ansible controller -m shell -a "mv kube-scheduler.kubeconfig /var/lib/kubernetes/"
-
-cat <<EOF | sudo tee /etc/kubernetes/config/kube-scheduler.yaml
-apiVersion: kubescheduler.config.k8s.io/v1beta1
-kind: KubeSchedulerConfiguration
-clientConnection:
-  kubeconfig: "/var/lib/kubernetes/kube-scheduler.kubeconfig"
-leaderElection:
-  leaderElect: true
-EOF
+mv kube-scheduler.kubeconfig /var/lib/kubernetes/
 
 cat <<EOF | sudo tee /etc/systemd/system/kube-scheduler.service
 [Unit]
@@ -694,7 +680,8 @@ Documentation=https://github.com/kubernetes/kubernetes
 
 [Service]
 ExecStart=/usr/local/bin/kube-scheduler \\
-  --config=/etc/kubernetes/config/kube-scheduler.yaml \\
+  --kubeconfig=/var/lib/kubernetes/kube-scheduler.kubeconfig \\
+  --leader-elect=false \\
   --v=2
 Restart=on-failure
 RestartSec=5
@@ -707,9 +694,9 @@ EOF
 ### 启动所有服务
 
 ```bash
-ansible controller -m shell -a "systemctl daemon-reload"
-ansible controller -m shell -a "systemctl enable kube-apiserver kube-controller-manager kube-scheduler"
-ansible controller -m shell -a "systemctl start kube-apiserver kube-controller-manager kube-scheduler"
+systemctl daemon-reload
+systemctl enable kube-apiserver kube-controller-manager kube-scheduler
+systemctl start kube-apiserver kube-controller-manager kube-scheduler
 ```
 
 ### 验证
@@ -783,3 +770,209 @@ EOF
   "platform": "linux/amd64"
 }
 ```
+
+## 部署worker节点
+
+### 准备worker节点
+
+关闭swap
+
+```bash
+[root@worker01 ~]# swapoff -a
+```
+
+创建指定目录
+
+```bash
+[root@worker01 ~]# mkdir -p \
+/etc/cni/net.d \
+/opt/cni/bin \
+/var/lib/kubelet \
+/var/lib/kube-proxy \
+/var/lib/kubernetes \
+/var/run/kubernetes
+```
+
+解压缩CNI插件，安装其他可执行程序
+
+```bash
+[root@worker01 ~]# tar xvf cni-plugins-linux-amd64-v0.8.7.tgz -C /opt/cni/bin/
+[root@worker01 ~]# chmod +x kubectl kubelet kube-proxy
+[root@worker01 ~]# mv kubectl kubelet kube-proxy /usr/local/bin/
+```
+
+设置CNI网络，必须与master上配置的CIDR一致
+
+```bash
+[root@worker01 ~]# POD_CIDR=10.200.0.0/16
+```
+
+部署kubernetes相关配置文件
+
+```bash
+[root@kube-master ~]# mv kube-worker-key.pem kube-worker.pem /var/lib/kubelet/
+[root@kube-master ~]# mv kubelet.kubeconfig /var/lib/kubelet/
+[root@worker01 ~]# mv ca.pem /var/lib/kubernetes/
+```
+
+创建kubelet配置文件
+
+```bash
+[root@worker01 ~]# cat <<EOF | sudo tee /var/lib/kubelet/kubelet-config.yaml
+kind: KubeletConfiguration
+apiVersion: kubelet.config.k8s.io/v1beta1
+authentication:
+  anonymous:
+    enabled: false
+  webhook:
+    enabled: true
+  x509:
+    clientCAFile: "/var/lib/kubernetes/ca.pem"
+authorization:
+  mode: Webhook
+clusterDomain: "cluster.local"
+clusterDNS:
+  - "10.32.0.10"
+podCIDR: "${POD_CIDR}"
+resolvConf: "/run/systemd/resolve/resolv.conf"
+runtimeRequestTimeout: "15m"
+tlsCertFile: "/var/lib/kubelet/kube-worker.pem"
+tlsPrivateKeyFile: "/var/lib/kubelet/kube-worker-key.pem"
+EOF
+```
+
+配置kubelet服务
+
+```bash
+[root@worker01 ~]# cat <<EOF | sudo tee /etc/systemd/system/kubelet.service
+[Unit]
+Description=Kubernetes Kubelet
+Documentation=https://github.com/kubernetes/kubernetes
+After=containerd.service
+Requires=containerd.service
+ 
+[Service]
+ExecStart=/usr/local/bin/kubelet \\
+  --config=/var/lib/kubelet/kubelet-config.yaml \\
+  --container-runtime=docker \\
+  --image-pull-progress-deadline=2m \\
+  --kubeconfig=/var/lib/kubelet/kubeconfig \\
+  --network-plugin=cni \\
+  --register-node=true \\
+  --v=2
+Restart=on-failure
+RestartSec=5
+ 
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+配置kube-proxy配置文件
+
+```bash
+[root@worker01 ~]# mv kube-proxy.kubeconfig /var/lib/kube-proxy/kubeconfig
+```
+
+创建运行配置文件
+
+```bash
+[root@worker01 ~]# cat <<EOF | sudo tee /var/lib/kube-proxy/kube-proxy-config.yaml
+kind: KubeProxyConfiguration
+apiVersion: kubeproxy.config.k8s.io/v1alpha1
+clientConnection:
+  kubeconfig: "/var/lib/kube-proxy/kubeconfig"
+mode: "iptables"
+clusterCIDR: "10.200.0.0/16"
+EOF
+```
+
+创建kube-proxy启动文件
+
+```bash
+[root@worker01 ~]# cat <<EOF | sudo tee /etc/systemd/system/kube-proxy.service
+[Unit]
+Description=Kubernetes Kube Proxy
+Documentation=https://github.com/kubernetes/kubernetes
+
+[Service]
+ExecStart=/usr/local/bin/kube-proxy \\
+  --config=/var/lib/kube-proxy/kube-proxy-config.yaml
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+启动服务
+
+```bash
+[root@worker01 ~]# systemctl enable  kubelet kube-proxy
+[root@worker01 ~]# systemctl start  kubelet kube-proxy
+```
+
+创建桥接网络配置文件
+
+```bash
+[root@worker01 ~]# cat <<EOF | sudo tee /etc/cni/net.d/10-bridge.conf
+{
+    "cniVersion": "0.3.1",
+    "name": "bridge",
+    "type": "bridge",
+    "bridge": "cnio0",
+    "isGateway": true,
+    "ipMasq": true,
+    "ipam": {
+        "type": "host-local",
+        "ranges": [
+          [{"subnet": "${POD_CIDR}"}]
+        ],
+        "routes": [{"dst": "0.0.0.0/0"}]
+    }
+}
+EOF
+```
+
+创建loopback网络配置文件
+
+```bash
+cat <<EOF | sudo tee /etc/cni/net.d/99-loopback.conf
+{
+    "cniVersion": "0.3.1",
+    "name": "lo",
+    "type": "loopback"
+}
+EOF
+```
+
+测试Deployment
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      name: nginx
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http-nginx
+          containerPort: 80
+          protocol: TCP
+```
+
