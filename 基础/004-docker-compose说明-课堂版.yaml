@@ -1,0 +1,43 @@
+version: "3.8"
+services:
+  db:
+    image: registry/image:tag
+    command: list[str]
+    configs: 
+    - source: my_config
+      target: /filepath
+      uid: '103'
+      gid: '103'
+      mode: 0440
+  web: 
+    image: registry/image:tag
+    command: list[str]
+    depends_on: 
+    - db 
+    deploy:
+      mode: replicated/global
+      replicas: 2
+      rollback_config:
+        parallelism: 2
+        delay: 10s
+        order: stop-first         
+      update_config:
+        parallelism: 2
+        delay: 10s
+        order: stop-first      
+      endpoint_mode: vip/dnsrr
+      resources:
+        limits: 
+          cpus: '0.5'
+          memory: 50M
+        reservations:
+          cpus: '0.25'
+          memory: 20M
+      restart_policy: 
+        condition: on-failure/none/any
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+configs:
+  my_config:
+    file: ./my_config.conf
