@@ -2,20 +2,18 @@ version: "3.8"
 services:
   db:
     image: registry/image:tag
-    command: list[str]
+    command: list[str] # ["arg1","arg2","arg3"]
     configs: 
     - source: my_config
       target: /filepath
       uid: '103'
       gid: '103'
       mode: 0440
-    dns:
-    - 8.8.8.8
-    - 9.9.9.9
+    dns: 8.8.8.8
     dns_search:
     - dc1.example.com
     - dc2.example.com
-    entrypoint: /code/entrypoint.sh
+    entrypoint: mariadb 
     env_file:
     - ./common.env
     - ./apps/web.env
@@ -80,8 +78,6 @@ services:
       published: 8080
       protocol: tcp
       mode: host/ingress（swarm模式）
-    
-
 configs:
   my_config:
     file: ./my_config.conf

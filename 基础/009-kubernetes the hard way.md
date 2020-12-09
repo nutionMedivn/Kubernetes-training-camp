@@ -91,7 +91,7 @@ EOF
 
 cat > ca-csr.json <<EOF
 {
-  "CN": "training-cluster",
+  "CN": "kubernetes",
   "key": {
     "algo": "rsa",
     "size": 2048
@@ -265,7 +265,7 @@ cfssl gencert \
 ### kube-apiserver服务端证书
 
 ```bash
-KUBERNETES_PUBLIC_ADDRESS=192.168.92.161
+KUBERNETES_PUBLIC_ADDRESS=192.168.92.160
 KUBERNETES_HOSTNAMES=kubernetes,kubernetes.default,kubernetes.default.svc,kubernetes.default.svc.cluster,kubernetes.svc.cluster.local
 
 cat > kubernetes-csr.json <<EOF
@@ -288,9 +288,9 @@ cat > kubernetes-csr.json <<EOF
 EOF
 
 cfssl gencert \
-  -ca=ca.pem \
-  -ca-key=ca-key.pem \
-  -config=ca-config.json \
+  -ca=ca/ca.pem \
+  -ca-key=ca/ca-key.pem \
+  -config=ca/ca-config.json \
   -hostname=kube-master,${KUBERNETES_PUBLIC_ADDRESS},127.0.0.1,${KUBERNETES_HOSTNAMES} \
   -profile=kubernetes \
   kubernetes-csr.json | cfssljson -bare kubernetes
@@ -331,7 +331,7 @@ cfssl gencert \
 ```bash
 scp ca/ca.pem kube-worker.pem kube-worker-key.pem kube-worker:~/
 
-cp ca.pem ca-key.pem kubernetes-key.pem kubernetes.pem service-account-key.pem service-account.pem ~/
+cp ca.pem ca-key.pem kubernetes-key.pem kubernetes.pem service-account-key.pem service-account.pem kube-worker.pem kube-worker-key.pem ~/
 ```
 
 ## 生成Kubernetes认证配置文件
@@ -344,48 +344,46 @@ cp ca.pem ca-key.pem kubernetes-key.pem kubernetes.pem service-account-key.pem s
 KUBERNETES_PUBLIC_ADDRESS=192.168.92.160
 ```
 
-#### 生成kubelet客户配置文件
-
-***这里有权限问题，使用admin.kubeconfig替代，但是可以自定clusterrole***
+#### 生成admin配置文件
 
 ```bash
-  kubectl config set-cluster training-cluster \
-    --certificate-authority=ca.pem \
+  kubectl config set-cluster kubernetes \
+    --certificate-authority=ca/ca.pem \
     --embed-certs=true \
-    --server=https://${KUBERNETES_PUBLIC_ADDRESS}:6443 \
-    --kubeconfig=kubelet.kubeconfig
+    --server=https://192.168.92.160:6443 \
+    --kubeconfig=admin.kubeconfig
 
-  kubectl config set-credentials system:node-problem-detector  \
-    --client-certificate=../kube-worker.pem \
-    --client-key=../kube-worker-key.pem \
+  kubectl config set-credentials admin \
+    --client-certificate=ca/admin.pem \
+    --client-key=ca/admin-key.pem \
     --embed-certs=true \
-    --kubeconfig=kubelet.kubeconfig 
+    --kubeconfig=admin.kubeconfig
 
   kubectl config set-context default \
-    --cluster=training-cluster \
-    --user=system:node \
-    --kubeconfig=kubelet.kubeconfig
+    --cluster=kubernetes \
+    --user=admin \
+    --kubeconfig=admin.kubeconfig
 
-  kubectl config use-context default --kubeconfig=kubelet.kubeconfig
+  kubectl config use-context default --kubeconfig=admin.kubeconfig
 ```
 
 #### 生成kuber-proxy配置文件
 
 ```bash
- kubectl config set-cluster training-cluster \
-    --certificate-authority=../ca.pem \
+ kubectl config set-cluster kubernetes \
+    --certificate-authority=ca/ca.pem \
     --embed-certs=true \
     --server=https://${KUBERNETES_PUBLIC_ADDRESS}:6443 \
     --kubeconfig=kube-proxy.kubeconfig
 
   kubectl config set-credentials system:kube-proxy \
-    --client-certificate=../kube-proxy.pem \
-    --client-key=../kube-proxy-key.pem \
+    --client-certificate=ca/kube-proxy.pem \
+    --client-key=ca/kube-proxy-key.pem \
     --embed-certs=true \
     --kubeconfig=kube-proxy.kubeconfig
 
   kubectl config set-context default \
-    --cluster=training-cluster \
+    --cluster=kubernetes \
     --user=system:kube-proxy \
     --kubeconfig=kube-proxy.kubeconfig
 
@@ -395,20 +393,20 @@ KUBERNETES_PUBLIC_ADDRESS=192.168.92.160
 #### 生成controller-manager配置文件
 
 ```bash
-  kubectl config set-cluster training-cluster \
-    --certificate-authority=../ca.pem \
+  kubectl config set-cluster kubernetes \
+    --certificate-authority=ca/ca.pem \
     --embed-certs=true \
     --server=https://127.0.0.1:6443 \
     --kubeconfig=kube-controller-manager.kubeconfig
 
   kubectl config set-credentials system:kube-controller-manager \
-    --client-certificate=../kube-controller-manager.pem \
-    --client-key=../kube-controller-manager-key.pem \
+    --client-certificate=ca/kube-controller-manager.pem \
+    --client-key=ca/kube-controller-manager-key.pem \
     --embed-certs=true \
     --kubeconfig=kube-controller-manager.kubeconfig
 
   kubectl config set-context default \
-    --cluster=training-cluster \
+    --cluster=kubernetes \
     --user=system:kube-controller-manager \
     --kubeconfig=kube-controller-manager.kubeconfig
 
@@ -418,55 +416,32 @@ KUBERNETES_PUBLIC_ADDRESS=192.168.92.160
 #### 生成kube-scheduler配置文件
 
 ```bash
-  kubectl config set-cluster training-cluster \
-    --certificate-authority=../ca.pem \
+  kubectl config set-cluster kubernetes \
+    --certificate-authority=ca/ca.pem \
     --embed-certs=true \
     --server=https://127.0.0.1:6443 \
     --kubeconfig=kube-scheduler.kubeconfig
 
   kubectl config set-credentials system:kube-scheduler \
-    --client-certificate=../kube-scheduler.pem \
-    --client-key=../kube-scheduler-key.pem \
+    --client-certificate=ca/kube-scheduler.pem \
+    --client-key=ca/kube-scheduler-key.pem \
     --embed-certs=true \
     --kubeconfig=kube-scheduler.kubeconfig
 
   kubectl config set-context default \
-    --cluster=training-cluster \
+    --cluster=kubernetes \
     --user=system:kube-scheduler \
     --kubeconfig=kube-scheduler.kubeconfig
 
   kubectl config use-context default --kubeconfig=kube-scheduler.kubeconfig
 ```
 
-#### 生成admin配置文件
-
-```bash
-  kubectl config set-cluster training-cluster \
-    --certificate-authority=../ca.pem \
-    --embed-certs=true \
-    --server=https://192.168.92.160:6443 \
-    --kubeconfig=admin.kubeconfig
-
-  kubectl config set-credentials admin \
-    --client-certificate=../admin.pem \
-    --client-key=../admin-key.pem \
-    --embed-certs=true \
-    --kubeconfig=admin.kubeconfig
-
-  kubectl config set-context default \
-    --cluster=training-cluster \
-    --user=admin \
-    --kubeconfig=admin.kubeconfig
-
-  kubectl config use-context default --kubeconfig=admin.kubeconfig
-```
-
 ### 分发配置文件
 
 ```bash
-scp kubelet.kubeconfig kube-proxy.kubeconfig kube-worker:~/
+scp kube-proxy.kubeconfig kube-worker:~/
 
-cp admin.kubeconfig kubelet.kubeconfig kube-controller-manager.kubeconfig kube-scheduler.kubeconfig ~/
+cp admin.kubeconfig kube-controller-manager.kubeconfig kube-scheduler.kubeconfig ~/
 ```
 
 ## 生成数据加密配置和key
@@ -708,6 +683,33 @@ systemctl enable kube-apiserver kube-controller-manager kube-scheduler
 systemctl start kube-apiserver kube-controller-manager kube-scheduler
 ```
 
+#### 生成kubelet客户配置文件
+
+使用admin.kubeconfig作为kubelet的配置文件
+
+<!-- ***这里有权限问题，使用admin.kubeconfig替代，但是可以自定clusterrole***
+
+```bash
+  kubectl config set-cluster kubernetes \
+    --certificate-authority=ca/ca.pem \
+    --embed-certs=true \
+    --server=https://${KUBERNETES_PUBLIC_ADDRESS}:6443 \
+    --kubeconfig=kubelet.kubeconfig
+
+  kubectl config set-credentials system:node  \
+    --client-certificate=ca/kube-worker.pem \
+    --client-key=ca/kube-worker-key.pem \
+    --embed-certs=true \
+    --kubeconfig=kubelet.kubeconfig 
+
+  kubectl config set-context default \
+    --cluster=kubernetes \
+    --user=system:node \
+    --kubeconfig=kubelet.kubeconfig
+
+  kubectl config use-context default --kubeconfig=kubelet.kubeconfig
+``` -->
+
 ### 验证
 
 ```bash
@@ -716,12 +718,10 @@ Warning: v1 ComponentStatus is deprecated in v1.19+
 NAME                 STATUS    MESSAGE             ERROR
 controller-manager   Healthy   ok                  
 scheduler            Healthy   ok                  
-etcd-1               Healthy   {"health":"true"}   
 etcd-0               Healthy   {"health":"true"}   
-etcd-2               Healthy   {"health":"true"}   
 ```
 
-### kubelet的RBAC认证
+<!-- ### kubelet的RBAC认证
 
 ```bash
 cat <<EOF | kubectl apply --kubeconfig admin.kubeconfig -f -
@@ -761,7 +761,7 @@ subjects:
     kind: User
     name: kubernetes
 EOF
-```
+``` -->
 
 验证
 
@@ -843,7 +843,6 @@ clusterDomain: "cluster.local"
 clusterDNS:
   - "10.32.0.10"
 podCIDR: "${POD_CIDR}"
-resolvConf: "/run/systemd/resolve/resolv.conf"
 runtimeRequestTimeout: "15m"
 tlsCertFile: "/var/lib/kubelet/kube-worker.pem"
 tlsPrivateKeyFile: "/var/lib/kubelet/kube-worker-key.pem"
@@ -857,17 +856,15 @@ EOF
 [Unit]
 Description=Kubernetes Kubelet
 Documentation=https://github.com/kubernetes/kubernetes
-After=containerd.service
-Requires=containerd.service
  
 [Service]
-ExecStart=/usr/local/bin/kubelet \\
-  --config=/var/lib/kubelet/kubelet-config.yaml \\
-  --container-runtime=docker \\
-  --image-pull-progress-deadline=2m \\
-  --kubeconfig=/var/lib/kubelet/kubeconfig \\
-  --network-plugin=cni \\
-  --register-node=true \\
+ExecStart=/usr/local/bin/kubelet \
+  --config=/var/lib/kubelet/kubelet-config.yaml \
+  --container-runtime=docker \
+  --image-pull-progress-deadline=2m \
+  --kubeconfig=/var/lib/kubelet/kubeconfig \
+  --network-plugin=cni \
+  --register-node=true \
   --v=2
 Restart=on-failure
 RestartSec=5
