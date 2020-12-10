@@ -265,7 +265,7 @@ cfssl gencert \
 ### kube-apiserver服务端证书
 
 ```bash
-KUBERNETES_PUBLIC_ADDRESS=192.168.92.160
+KUBERNETES_PUBLIC_ADDRESS=192.168.92.160,10.0.0.1
 KUBERNETES_HOSTNAMES=kubernetes,kubernetes.default,kubernetes.default.svc,kubernetes.default.svc.cluster,kubernetes.svc.cluster.local
 
 cat > kubernetes-csr.json <<EOF
@@ -933,7 +933,7 @@ EOF
     "ipam": {
         "type": "host-local",
         "ranges": [
-          [{"subnet": "${POD_CIDR}"}]
+          [{"subnet": "10.200.1.0/24"}]
         ],
         "routes": [{"dst": "0.0.0.0/0"}]
     }
@@ -981,4 +981,5 @@ spec:
           containerPort: 80
           protocol: TCP
 ```
+
 
