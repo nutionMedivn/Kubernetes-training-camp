@@ -45,7 +45,7 @@ EOF
 ### 添加阿里云kubernetes源
 
 ```bash
-cat <<EOF > kubernetes.repo
+cat > /etc/yum.repos.d/kubernetes.repo <<EOF 
 [kubernetes]
 name=Kubernetes
 baseurl=https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-x86_64
@@ -154,10 +154,10 @@ Use "kubeadm init [command] --help" for more information about a command.
 master执行
 
 ```bash
-kubeadm init --apiserver-advertise-address 192.168.72.170 \
+kubeadm init --apiserver-advertise-address 192.168.92.170 \
 --image-repository registry.cn-hangzhou.aliyuncs.com/google_containers \
---kubernetes-version v1.19.0 \
---service-cidr=10.96.0.0/12 \
+--kubernetes-version v1.20.0 \
+--service-cidr=10.96.0.0/16 \
 --pod-network-cidr=10.244.0.0/16
 
 # 记录如下信息
