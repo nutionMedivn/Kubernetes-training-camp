@@ -608,7 +608,7 @@ systemctl enable kube-controller-manager.service
   kubectl config use-context default --kubeconfig=admin.kubeconfig
 
 
-mkdir -p \
+mkdir -pv \
 /etc/cni/net.d \
 /opt/cni/bin \
 /var/lib/kubelet \
