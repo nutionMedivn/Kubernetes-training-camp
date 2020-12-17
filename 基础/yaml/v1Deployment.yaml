@@ -55,7 +55,7 @@ spec:
                 values: list[str]
         pod_affinity: 
           preferred_during_scheduling_ignored_during_execution:
-          - weight
+          - weight: int
             pod_affinity_term:
               label_selector:
                 match_expressions: list[V1LabelSelectorRequirement]
@@ -158,7 +158,7 @@ spec:
         toleration_seconds: int 
         value: str
       volumes: list[V1Volume] # https://github.com/kubernetes-client/python/blob/master/kubernetes/docs/V1Volume.md
-status: 
+status:
   available_replicas: str
   conditions: 
   - last_transition_time: datetime
