@@ -1,27 +1,27 @@
 api_version: str
 kind: str
 metadata: 
-  annotations: dict(str, str)
-  labels: dict(str, str)
+  annotations: dict(str, str)       
+  labels: dict(str, str)        # 灵活运用，是资源合理调度，和拓扑生成的基础
   name: str
   namespace: str
 spec: 
-  min_ready_seconds: int
+  min_ready_seconds: int        # 预备时间，新建pod至少多久可用
   paused: bool
-  progress_deadline_seconds: int
-  replicas: int
+  progress_deadline_seconds: int    # 超时认定失败默认600
+  replicas: int                    # 副本数
   revision_history_limit: int
   selector: 
-    match_expressions:
+    match_expressions:                  
     - key: str
       operator: str
       values: list[str]
     match_labels: dict(str, str)
   strategy: 
-    type: str     # default is RollingUpdate，can be Recreate
+    type: str     # 默认RollingUpdate，可以是Recreate
     rolling_update: 
-      max_surge: object           
-      max_unavailable: object
+      max_surge: object                   # 设置30%，则生成130% old+new，停旧创新
+      max_unavailable: object             # 设置30%，则直接缩减70% 创新停旧 相对于期望值
   template: 
     metadata:
       annotations: dict(str, str)
