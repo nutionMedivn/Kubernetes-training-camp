@@ -21,7 +21,8 @@
 sudo mkdir -p /etc/docker
 sudo tee /etc/docker/daemon.json <<-'EOF'
 {
-  "registry-mirrors": ["https://tlwy9ltd.mirror.aliyuncs.com"]
+  "registry-mirrors": ["https://tlwy9ltd.mirror.aliyuncs.com"],
+  "exec-opts": ["native.cgroupdriver=systemd"]
 }
 EOF
 sudo systemctl daemon-reload
